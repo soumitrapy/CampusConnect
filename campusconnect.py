@@ -1,4 +1,85 @@
-from utils import memoize, PriorityQueue
+#from utils import memoize, PriorityQueue
+import heapq
+import functools
+
+class PriorityQueue:
+    """A Queue in which the minimum (or maximum) element (as determined by f and
+    order) is returned first.
+    If order is 'min', the item with minimum f(x) is
+    returned first; if order is 'max', then it is the item with maximum f(x).
+    Also supports dict-like lookup."""
+
+    def __init__(self, order='min', f=lambda x: x):
+        self.heap = []
+        if order == 'min':
+            self.f = f
+        elif order == 'max':  # now item with max f(x)
+            self.f = lambda x: -f(x)  # will be popped first
+        else:
+            raise ValueError("Order must be either 'min' or 'max'.")
+
+    def append(self, item):
+        """Insert item at its correct position."""
+        heapq.heappush(self.heap, (self.f(item), item))
+
+    def extend(self, items):
+        """Insert each item in items at its correct position."""
+        for item in items:
+            self.append(item)
+
+    def pop(self):
+        """Pop and return the item (with min or max f(x) value)
+        depending on the order."""
+        if self.heap:
+            return heapq.heappop(self.heap)[1]
+        else:
+            raise Exception('Trying to pop from empty PriorityQueue.')
+
+    def __len__(self):
+        """Return current capacity of PriorityQueue."""
+        return len(self.heap)
+
+    def __contains__(self, key):
+        """Return True if the key is in PriorityQueue."""
+        return any([item == key for _, item in self.heap])
+
+    def __getitem__(self, key):
+        """Returns the first value associated with key in PriorityQueue.
+        Raises KeyError if key is not present."""
+        for value, item in self.heap:
+            if item == key:
+                return value
+        raise KeyError(str(key) + " is not in the priority queue")
+
+    def __delitem__(self, key):
+        """Delete the first occurrence of key."""
+        try:
+            del self.heap[[item == key for _, item in self.heap].index(True)]
+        except ValueError:
+            raise KeyError(str(key) + " is not in the priority queue")
+        heapq.heapify(self.heap)
+
+def memoize(fn, slot=None, maxsize=32):
+    """Memoize fn: make it remember the computed value for any argument list.
+    If slot is specified, store result in that slot of first argument.
+    If slot is false, use lru_cache for caching the values."""
+    if slot:
+        def memoized_fn(obj, *args):
+            if hasattr(obj, slot):
+                return getattr(obj, slot)
+            else:
+                val = fn(obj, *args)
+                setattr(obj, slot, val)
+                return val
+    else:
+        @functools.lru_cache(maxsize=maxsize)
+        def memoized_fn(*args):
+            return fn(*args)
+
+    return memoized_fn
+
+
+import math
 
 class Order:
     def __init__(self, name, prefs) -> None:
@@ -156,12 +237,17 @@ def best_first_graph_search(problem, f, display=False):
     frontier = PriorityQueue('min', f)
     frontier.append(node)
     explored = set()
+    minf, minnode = math.inf, None  # if the solution does not exist
     while frontier:
         node = frontier.pop()
-        print(node)
+        #print(node, f(node))
+        if f(node)<minf:
+            minf, minnode = f(node), node
+                   
         if problem.goal_test(node.state):
             if display:
                 print(len(explored), "paths have been expanded and", len(frontier), "paths remain in the frontier")
+            print(f"All orders can be covered, and the timings is: {node.state}")
             return node
         explored.add(node)
         for child in node.expand(problem):
@@ -171,28 +257,29 @@ def best_first_graph_search(problem, f, display=False):
                 if f(child) < frontier[child]:
                     del frontier[child]
                     frontier.append(child)
+    print(f"All orders can not be covered, and optimized timings is: {minnode}")
     return None
 
-def uniform_cost_search(problem, display=False):
-    """[Figure 3.14]"""
-    return best_first_graph_search(problem, lambda node: node.path_cost, display)
+def greedy_best_first_search(problem, h=None, display=False):
+    h = memoize(h or problem.h, 'h')
+    return best_first_graph_search(problem, h, display)
 
 def astar_search(problem, h=None, display=False):
     """A* search is best-first graph search with f(n) = g(n)+h(n).
     You need to specify the h function when you call astar_search, or
     else in your Problem subclass."""
     h = memoize(h or problem.h, 'h')
-    return best_first_graph_search(problem, lambda n: n.path_cost + h(n), display)
+    return best_first_graph_search(problem, lambda n: (1/10)*n.path_cost + h(n), display)
 
 if __name__=='__main__':
     orders = {
     Order('s1',{9:'a',10:'b',11:'c'}),
     Order('s2',{12:'c'}),
-    #Order('s3',{9:'a', 12:'c',10:'b',13:'d'}),
-    Order('s4',{9:'d'}),
+    Order('s3',{9:'a', 12:'c',10:'b',13:'d'}),
+    #Order('s4',{9:'d'}),
     Order('s5',{12:'d'}),
     }
     cp = CampusConnectProblem(orders)
-    sol = astar_search(cp)
-    print(f'solution is: {sol}')
+    greedy_best_first_search(cp)
+    astar_search(cp)
 
